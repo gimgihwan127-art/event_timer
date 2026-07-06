@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>행사 타이머</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+KR:wght@300;400;700;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131c;
+    --border: #22222f;
+    --accent: #c8a96e;
+    --accent-dim: #7a6540;
+    --text: #e8e4da;
+    --muted: #555560;
+    --green: #4caf6e;
+    --red: #d05a5a;
+    --msg-color: #53ef12;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  body {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: 1fr;
+  }
+
+  /* ───── DISPLAY PANEL ───── */
+  .display {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid var(--border);
+    transition: background 0.2s;
+    height: 100vh;
+  }
+
+  .display.alert { animation: flash 0.6s ease-in-out infinite; }
+  @keyframes flash { 0%,100%{background:var(--bg)} 50%{background:#cc1111} }
+
+  .top-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--border);
+    transition: background 0.4s;
+  }
+  .top-bar.on { background: var(--accent); animation: pb 2s ease-in-out infinite; }
+  @keyframes pb { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .display-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(16px, 3vh, 36px);
+    width: 100%;
+    padding: 0 4%;
+  }
+
+  .elapsed-label {
+    font-size: 13px;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.4s;
+  }
+  .elapsed-label.on { color: var(--accent-dim); }
+
+  .timer-display {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: clamp(80px, 12vw, 220px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: #2a2a38;
+    transition: color 0.4s, text-shadow 0.4s;
+    text-align: center;
+  }
+  .timer-display.on {
+    color: var(--text);
+    text-shadow: 0 0 80px rgba(200,169,110,0.2);
+  }
+  .sep { display: inline-block; }
+  .timer-display.on .sep { animation: blink 1s step-start infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  .msg-area {
+    margin-top: clamp(20px, 3vh, 40px);
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4%;
+    min-height: 80px;
+  }
+  .msg-text {
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: clamp(40px, 6vw, 100px);
+    font-weight: 900;
+    color: var(--msg-color);
+    letter-spacing: 0.03em;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.5s;
+    line-height: 1.2;
+    text-shadow: 0 2px 24px rgba(83,239,18,0.3);
+  }
+  .msg-text.show { opacity: 1; }
+
+  .display-status {
+    position: absolute;
+    bottom: 20px;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ───── CONTROL PANEL ───── */
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--surface);
+    overflow-y: auto;
+  }
+
+  .ctrl-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ctrl-title {
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .conn-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+  .conn-dot.ok { background: var(--green); }
+
+  /* Preview */
+  .ctrl-preview {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+  .preview-time {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 42px;
+    color: var(--muted);
+    letter-spacing: -0.02em;
+    transition: color 0.3s;
+    line-height: 1;
+  }
+  .preview-time.on { color: var(--text); }
+  .preview-status {
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 8px;
+    transition: color 0.3s;
+  }
+  .preview-status.on { color: var(--accent); }
+
+  /* Sections */
+  .ctrl-section {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ctrl-section-label {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Buttons */
+  .btn {
+    width: 100%;
+    height: 56px;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: transform 0.08s, opacity 0.15s, background 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn:active { transform: scale(0.97); opacity: 0.85; }
+
+  .btn-start { background: var(--green); color: #0a140d; }
+  .btn-stop  { background: var(--red); color: #140a0a; display: none; }
+  .btn-reset {
+    background: transparent;
+    color: var(--muted);
+    border: 1.5px solid var(--border);
+    font-size: 14px;
+    font-weight: 400;
+    height: 44px;
+    letter-spacing: 0.1em;
+  }
+  .btn-alert {
+    background: transparent;
+    color: var(--muted);
+    border: 1.5px solid var(--border);
+    font-size: 14px;
+    font-weight: 700;
+    height: 44px;
+    letter-spacing: 0.05em;
+    transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.08s;
+  }
+  .btn-alert.on {
+    background: #cc1111;
+    color: #fff;
+    border-color: #cc1111;
+  }
+
+  /* Message */
+  .msg-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .msg-btns {
+    display: flex;
+    gap: 8px;
+  }
+  .msg-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    padding: 0 14px;
+    height: 48px;
+    outline: none;
+    font-family: 'Noto Sans KR', sans-serif;
+    transition: border-color 0.2s;
+  }
+  .msg-input:focus { border-color: var(--accent); }
+  .msg-input::placeholder { color: #333344; }
+
+  .msg-send {
+    background: var(--accent);
+    color: #0a0a0f;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    flex: 1;
+    height: 48px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.08s, opacity 0.15s;
+  }
+  .msg-send:active { transform: scale(0.96); opacity: 0.8; }
+
+  .msg-clear {
+    background: transparent;
+    color: var(--muted);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    flex: 1;
+    height: 48px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.08s;
+  }
+  .msg-clear:active { transform: scale(0.96); }
+
+  /* Ripple */
+  .rpl {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    transform: scale(0);
+    animation: rpa 0.5s linear;
+    pointer-events: none;
+  }
+  @keyframes rpa { to { transform: scale(4); opacity: 0; } }
+
+  /* Fullscreen hint */
+  .ctrl-footer {
+    padding: 16px 20px;
+    margin-top: auto;
+  }
+  .btn-fullscreen {
+    width: 100%;
+    background: transparent;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    height: 36px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-fullscreen:hover { border-color: var(--accent-dim); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ── DISPLAY ── -->
+<div class="display" id="display">
+  <div class="top-bar" id="topBar"></div>
+  <div class="display-inner">
+    <div class="elapsed-label" id="elapsedLabel">경과 시간</div>
+    <div class="timer-display" id="timerDisplay">
+      <span id="hh">00</span><span class="sep">:</span><span id="mm">00</span><span class="sep">:</span><span id="ss">00</span>
+    </div>
+    <div class="msg-wrap">
+      <div class="msg-text" id="msgText"></div>
+    </div>
+  </div>
+  <div class="display-status" id="displayStatus">대기 중</div>
+</div>
+
+<!-- ── CONTROL ── -->
+<div class="control">
+  <div class="ctrl-header">
+    <span class="ctrl-title">컨트롤</span>
+    <div class="conn-dot ok" id="connDot"></div>
+  </div>
+
+  <div class="ctrl-preview">
+    <div class="preview-time" id="previewTime">00:00:00</div>
+    <div class="preview-status" id="previewStatus">대기 중</div>
+  </div>
+
+  <div class="ctrl-section">
+    <div class="ctrl-section-label">타이머</div>
+    <button class="btn btn-start" id="btnStart" onclick="timerAction('start')">시작</button>
+    <button class="btn btn-stop"  id="btnStop"  onclick="timerAction('stop')">정지</button>
+    <button class="btn btn-reset" onclick="confirmReset()">리셋</button>
+  </div>
+
+  <div class="ctrl-section">
+    <div class="ctrl-section-label">경고</div>
+    <button class="btn btn-alert" id="btnAlert" onclick="toggleAlert()">⚠️ 경고 깜빡임 OFF</button>
+  </div>
+
+  <div class="ctrl-section">
+    <div class="ctrl-section-label">메시지</div>
+    <div class="msg-row">
+      <input class="msg-input" id="msgInput" placeholder="화면에 표시할 메시지" maxlength="40">
+      <div class="msg-btns">
+        <button class="msg-send" onclick="sendMsg()" style="flex:1">전송</button>
+        <button class="msg-clear" onclick="clearMsg()" style="flex:1">지우기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctrl-footer">
+    <button class="btn-fullscreen" onclick="toggleFullscreen()">⛶ 전체화면</button>
+  </div>
+</div>
+
+<script>
+  const pad = (n, l=2) => String(n).padStart(l, '0');
+
+  let running = false;
+  let elapsed = 0;
+  let startedAt = null;
+  let rafId = null;
+  let alertOn = false;
+  let currentMsg = '';
+
+  function getElapsed() {
+    return running ? elapsed + (performance.now() - startedAt) : elapsed;
+  }
+
+  function renderTime(ms) {
+    const ts = Math.floor(ms / 1000);
+    const s = ts % 60, m = Math.floor(ts/60) % 60, h = Math.floor(ts/3600);
+    const str = pad(h) + ':' + pad(m) + ':' + pad(s);
+    document.getElementById('hh').textContent = pad(h);
+    document.getElementById('mm').textContent = pad(m);
+    document.getElementById('ss').textContent = pad(s);
+    document.getElementById('previewTime').textContent = str;
+  }
+
+  function tick() {
+    if (!running) return;
+    renderTime(getElapsed());
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function setRunning(r) {
+    running = r;
+    const on = r;
+    document.getElementById('timerDisplay').classList.toggle('on', on);
+    document.getElementById('elapsedLabel').classList.toggle('on', on);
+    document.getElementById('topBar').classList.toggle('on', on);
+    document.getElementById('previewTime').classList.toggle('on', on);
+    document.getElementById('previewStatus').classList.toggle('on', on);
+    const statusText = r ? '진행 중' : (elapsed > 0 ? '일시 정지' : '대기 중');
+    document.getElementById('displayStatus').textContent = statusText;
+    document.getElementById('previewStatus').textContent = statusText;
+    document.getElementById('btnStart').style.display = r ? 'none' : 'block';
+    document.getElementById('btnStop').style.display = r ? 'block' : 'none';
+  }
+
+  function timerAction(action) {
+    if (action === 'start' && !running) {
+      startedAt = performance.now();
+      setRunning(true);
+      if (rafId) cancelAnimationFrame(rafId);
+      tick();
+    } else if (action === 'stop' && running) {
+      elapsed += performance.now() - startedAt;
+      startedAt = null;
+      setRunning(false);
+      if (rafId) cancelAnimationFrame(rafId);
+      renderTime(elapsed);
+    }
+  }
+
+  function confirmReset() {
+    if (elapsed === 0 && !running) return;
+    if (confirm('타이머를 리셋할까요?')) {
+      if (rafId) cancelAnimationFrame(rafId);
+      elapsed = 0; startedAt = null;
+      setRunning(false);
+      renderTime(0);
+    }
+  }
+
+  function toggleAlert() {
+    alertOn = !alertOn;
+    const btn = document.getElementById('btnAlert');
+    btn.classList.toggle('on', alertOn);
+    btn.textContent = alertOn ? '⚠️ 경고 깜빡임 ON' : '⚠️ 경고 깜빡임 OFF';
+    document.getElementById('display').classList.toggle('alert', alertOn);
+  }
+
+  function sendMsg() {
+    const t = document.getElementById('msgInput').value.trim();
+    if (!t) return;
+    currentMsg = t;
+    const el = document.getElementById('msgText');
+    el.textContent = t;
+    el.classList.add('show');
+    document.getElementById('msgInput').value = '';
+  }
+
+  function clearMsg() {
+    currentMsg = '';
+    const el = document.getElementById('msgText');
+    el.classList.remove('show');
+    setTimeout(() => { el.textContent = ''; }, 500);
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  // Enter key for message
+  document.getElementById('msgInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMsg();
+  });
+
+  // Ripple effect
+  document.querySelectorAll('.btn, .msg-send, .msg-clear').forEach(btn => {
+    btn.addEventListener('pointerdown', e => {
+      const r = document.createElement('span');
+      r.className = 'rpl';
+      const rc = btn.getBoundingClientRect(), sz = Math.max(rc.width, rc.height);
+      r.style.cssText = `width:${sz}px;height:${sz}px;left:${e.clientX-rc.left-sz/2}px;top:${e.clientY-rc.top-sz/2}px`;
+      btn.appendChild(r);
+      r.addEventListener('animationend', () => r.remove());
+    });
+  });
+</script>
+</body>
+</html>
